@@ -1,0 +1,22 @@
+{
+  "libdivecomputer": {
+    "repository": "https://github.com/libdivecomputer/libdivecomputer",
+    "commit": "14f92934c0aedbba7a5aafe8915e8a96d944335c"
+  },
+  "tools": {
+    "emcc": "emcc (Emscripten gcc/clang-like replacement + linker emulating GNU ld) 7.0.0-git",
+    "clang": "clang version 24.0.0git",
+    "autoconf": "autoconf (GNU Autoconf) 2.73",
+    "automake": "automake (GNU automake) 1.20",
+    "libtool": "libtool (GNU libtool) 2.6.2"
+  },
+  "inputs": {
+    "build.sh": "0ba643b30414e1a1c9fbfee108bc00fc4f5bef1d2bacc2dc87c79c42b26fe30a",
+    "divelog_libdc.c": "89a281a3e5aeb09ef4d16ff3f6fd3f265a15d1a4d90ae4de15f8fb6cfc3ea098",
+    "sans_tiocgserial.h": "39dae367c0b35b726aac867989118eed9f5b3f89707330a1f3db9427f8a0b644"
+  },
+  "outputs": {
+    "libdc.wasm": { "sha256": "f2c6fbd46cac9feed6d8c903d679e3188f729939a73b8124e97d76ee6e304f53", "bytes": 332074 },
+    "libdc.mjs": { "sha256": "c1cebb7d74b8056eaa25fd4673979e887a405073406c32b79e27dbc72958cd59", "bytes": 15946 }
+  }
+}
