@@ -54,8 +54,8 @@ EM_JS(void, js_purge, (void), { Module.divelog.purge(); });
 EM_JS(int, js_name, (char *data, size_t size), { return Module.divelog.name(data, size); });
 EM_JS(int, js_cancelled, (void), { return Module.divelog.cancelled ? 1 : 0; });
 EM_JS(void, js_log, (int level, const char *message), { Module.divelog.log(level, UTF8ToString(message)); });
-EM_JS(void, js_devinfo, (unsigned int model, unsigned int firmware, unsigned int serial), {
-	Module.divelog.devinfo(model, firmware, serial >>> 0);
+EM_JS(int, js_devinfo, (unsigned int model, unsigned int firmware, unsigned int serial, unsigned char *fingerprint, size_t size), {
+	return Module.divelog.devinfo(model, firmware, serial >>> 0, fingerprint, size);
 });
 EM_JS(void, js_progress, (unsigned int current, unsigned int maximum), { Module.divelog.progress(current, maximum); });
 EM_JS(void, js_dive_raw, (const unsigned char *data, unsigned int size, const unsigned char *fingerprint, unsigned int fsize), {
@@ -68,7 +68,7 @@ EM_JS(void, js_dive_header, (int status, int year, int month, int day, int hour,
 		divemode, ngasmixes, oxygen, helium, tmin: has_tmin ? tmin : null });
 });
 EM_JS(void, js_sample, (int type, double a, double b), { Module.divelog.sample(type, a, b); });
-EM_JS(void, js_dive_end, (int status), { Module.divelog.diveEnd(status); });
+EM_JS(int, js_dive_end, (int status), { return Module.divelog.diveEnd(status) ? 1 : 0; });
 EM_JS(void, js_descriptor, (const char *vendor, const char *product, unsigned int family, unsigned int model, unsigned int transports), {
 	Module.divelog.descriptor(UTF8ToString(vendor), UTF8ToString(product), family, model, transports);
 });
@@ -140,8 +140,14 @@ static void
 on_event (dc_device_t *device, dc_event_type_t event, const void *data, void *userdata)
 {
 	if (event == DC_EVENT_DEVINFO) {
+		/* Comme Subsurface : le JavaScript retrouve par le numéro de série
+		 * l'empreinte de la dernière plongée importée de cet appareil, et la
+		 * lecture s'arrête à cette plongée. Les pilotes la lisent après cet
+		 * événement (le Shearwater, en parcourant son manifeste). */
 		const dc_event_devinfo_t *devinfo = (const dc_event_devinfo_t *) data;
-		js_devinfo (devinfo->model, devinfo->firmware, devinfo->serial);
+		unsigned char fingerprint[64];
+		int size = js_devinfo (devinfo->model, devinfo->firmware, devinfo->serial, fingerprint, sizeof (fingerprint));
+		if (size > 0) dc_device_set_fingerprint (device, fingerprint, (unsigned int) size);
 	} else if (event == DC_EVENT_PROGRESS) {
 		const dc_event_progress_t *progress = (const dc_event_progress_t *) data;
 		js_progress (progress->current, progress->maximum);
@@ -172,20 +178,16 @@ on_sample (dc_sample_type_t type, const dc_sample_value_t *value, void *userdata
 	}
 }
 
-typedef struct download_t {
-	dc_device_t *device;
-	unsigned int count;
-	unsigned int max;
-} download_t;
-
+/* La suite est décidée par le JavaScript (diveEnd) : continuer, ou s'arrêter
+ * après cette plongée. */
 static int
 on_dive (const unsigned char *data, unsigned int size, const unsigned char *fingerprint, unsigned int fsize, void *userdata)
 {
-	download_t *download = (download_t *) userdata;
+	dc_device_t *device = (dc_device_t *) userdata;
 	js_dive_raw (data, size, fingerprint, fsize);
 
 	dc_parser_t *parser = NULL;
-	dc_status_t status = dc_parser_new (&parser, download->device, data, size);
+	dc_status_t status = dc_parser_new (&parser, device, data, size);
 	if (status == DC_STATUS_SUCCESS) {
 		dc_datetime_t dt = {0};
 		unsigned int divetime = 0, ngasmixes = 0;
@@ -205,10 +207,7 @@ on_dive (const unsigned char *data, unsigned int size, const unsigned char *fing
 		if (status == DC_STATUS_SUCCESS) status = dc_parser_samples_foreach (parser, on_sample, NULL);
 		dc_parser_destroy (parser);
 	}
-	js_dive_end (status);
-
-	download->count++;
-	return download->max == 0 || download->count < download->max;
+	return js_dive_end (status);
 }
 
 static const dc_descriptor_t *
@@ -258,13 +257,13 @@ dl_list_ble (const char *name)
 	return count;
 }
 
-/* Télécharge au plus `max_dives` plongées, les plus récentes d'abord pour un
- * Shearwater (0 : toutes). `shutdown` : fermer l'appareil par dc_device_close,
- * qui envoie à un Shearwater la commande d'arrêt (2E 90 20 00) et termine la
- * session Bluetooth côté appareil ; 0 laisse l'appareil prêt pour une autre
- * lecture sur la même connexion. Renvoie un dc_status_t. */
+/* Télécharge les plongées, les plus récentes d'abord, jusqu'à l'empreinte
+ * donnée à DEVINFO, jusqu'à ce que diveEnd réponde « stop », ou jusqu'à
+ * l'annulation (Module.divelog.cancelled). L'appareil est toujours refermé par
+ * dc_device_close, qui envoie à un Shearwater la commande de fin de session
+ * (2E 90 20 00) : il quitte alors le mode Bluetooth. Renvoie un dc_status_t. */
 EMSCRIPTEN_KEEPALIVE int
-dl_download (const char *vendor, const char *product, unsigned int max_dives, int loglevel, int shutdown)
+dl_download (const char *vendor, const char *product, int loglevel)
 {
 	dc_context_t *context = NULL;
 	dc_iostream_t *iostream = NULL;
@@ -297,15 +296,13 @@ dl_download (const char *vendor, const char *product, unsigned int max_dives, in
 
 	dc_device_set_cancel (device, on_cancel, NULL);
 	dc_device_set_events (device, DC_EVENT_DEVINFO | DC_EVENT_PROGRESS, on_event, NULL);
+	status = dc_device_foreach (device, on_dive, device);
 
-	download_t download = { device, 0, max_dives };
-	status = dc_device_foreach (device, on_dive, &download);
-
-	/* Sans dc_device_close, la petite structure de l'appareil reste allouée. */
-	if (shutdown) {
-		dc_status_t closed = dc_device_close (device);
-		if (status == DC_STATUS_SUCCESS) status = closed;
-	}
+	/* Sans dc_device_close, la structure de l'appareil resterait allouée.
+	 * L'annulation est levée avant l'envoi de la commande de fin. Un échec de
+	 * cet envoi (liaison déjà perdue) ne change rien aux plongées lues : seul
+	 * compte le statut de la lecture. */
+	dc_device_close (device);
 
 done:
 	dc_iostream_close (iostream);

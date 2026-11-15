@@ -55,7 +55,7 @@ depuis GitHub au même commit.
 
 | Version de DiveLog | Commit de libdivecomputer | `libdc.wasm` | `libdc.mjs` |
 |---|---|---|---|
-| (première mise en ligne, étiquette à poser) | `14f92934c0ae` | `f2c6fbd46cac9feed6d8c903d679e3188f729939a73b8124e97d76ee6e304f53` (332 074 octets) | `c1cebb7d74b8056eaa25fd4673979e887a405073406c32b79e27dbc72958cd59` (15 946 octets) |
+| `divelog-2026-11-15` (première mise en ligne) | `14f92934c0ae` | `0318039310371f169c7f6262b3a339e004de50558442b7390241a6aadd7f77f0` (332 137 octets) | `be3e980160a4b8cd71ea3f57ab7b9023f8affa4b0832a912f248120398fab618` (16 000 octets) |
 
 Chaque version mise en ligne reçoit une étiquette git dans ce dépôt, publiée
 avant le déploiement.
@@ -89,8 +89,12 @@ La page charge le module par sa fonction exportée par défaut,
 - `dl_list_ble(nom)` : les modèles lisibles en Bluetooth basse consommation
   (ceux que `nom` désigne s'il n'est pas vide), un appel de
   `Module.divelog.descriptor` par modèle ;
-- `dl_download(fabricant, modèle, nombre max, niveau de journal, arrêt)` :
-  asynchrone (JSPI), renvoie un `dc_status_t`.
+- `dl_download(fabricant, modèle, niveau de journal)` : asynchrone (JSPI),
+  renvoie un `dc_status_t`. Les plongées arrivent de la plus récente à la plus
+  ancienne ; la lecture s'arrête à l'empreinte donnée par `devinfo`, quand
+  `diveEnd` répond faux, ou à l'annulation. L'appareil est toujours refermé
+  par `dc_device_close` (un Shearwater reçoit alors sa commande de fin de
+  session et quitte le mode Bluetooth).
 
 La colle appelle en retour les fonctions de l'objet `Module.divelog`, que la
 page fournit (pointeurs dans `Module.HEAPU8`) :
@@ -104,12 +108,12 @@ page fournit (pointeurs dans `Module.HEAPU8`) :
 | `name(ptr, size)` → `number` | écrire le nom Bluetooth de l'appareil ; négatif s'il est inconnu |
 | `cancelled` (propriété lue) | vrai pour interrompre le téléchargement |
 | `log(niveau, message)` | journal de libdivecomputer |
-| `devinfo(modèle, micrologiciel, numéro de série)` | identité de l'appareil |
+| `devinfo(modèle, micrologiciel, numéro de série, ptr, taille)` → `number` | identité de l'appareil ; écrire à `ptr` (au plus `taille` octets) l'empreinte de la dernière plongée déjà lue, et en rendre la longueur (0 : aucune, tout lire) |
 | `progress(courant, maximum)` | avancement |
 | `diveRaw(ptr, size, empreinte, taille de l'empreinte)` | octets bruts d'une plongée |
 | `diveHeader({ status, year, month, day, hour, minute, second, timezone, divetime, maxdepth, divemode, ngasmixes, oxygen, helium, tmin })` | en-tête relu par `dc_parser` |
 | `sample(type, a, b)` | un relevé (temps, profondeur, température, pression, palier) |
-| `diveEnd(status)` | fin de la plongée |
+| `diveEnd(status)` → `boolean` | fin de la plongée (`status` : relecture par `dc_parser`) ; vrai pour continuer, faux pour s'arrêter après elle |
 | `descriptor(fabricant, modèle, famille, numéro, transports)` | un modèle, pour `dl_list_ble` |
 
 ## English summary

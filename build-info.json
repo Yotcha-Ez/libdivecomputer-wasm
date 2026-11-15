@@ -12,11 +12,11 @@
   },
   "inputs": {
     "build.sh": "0ba643b30414e1a1c9fbfee108bc00fc4f5bef1d2bacc2dc87c79c42b26fe30a",
-    "divelog_libdc.c": "89a281a3e5aeb09ef4d16ff3f6fd3f265a15d1a4d90ae4de15f8fb6cfc3ea098",
+    "divelog_libdc.c": "45677da6b9b7ccf9177f195eb2a48c0673a052e8a523a9892cd4eb629299022d",
     "sans_tiocgserial.h": "39dae367c0b35b726aac867989118eed9f5b3f89707330a1f3db9427f8a0b644"
   },
   "outputs": {
-    "libdc.wasm": { "sha256": "f2c6fbd46cac9feed6d8c903d679e3188f729939a73b8124e97d76ee6e304f53", "bytes": 332074 },
-    "libdc.mjs": { "sha256": "c1cebb7d74b8056eaa25fd4673979e887a405073406c32b79e27dbc72958cd59", "bytes": 15946 }
+    "libdc.wasm": { "sha256": "0318039310371f169c7f6262b3a339e004de50558442b7390241a6aadd7f77f0", "bytes": 332137 },
+    "libdc.mjs": { "sha256": "be3e980160a4b8cd71ea3f57ab7b9023f8affa4b0832a912f248120398fab618", "bytes": 16000 }
   }
 }
